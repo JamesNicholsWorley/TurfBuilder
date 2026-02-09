@@ -1,0 +1,1444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Turf Builder - Canvassing Route Planner</title>
+    <style>
+        /* Leaflet CSS - inlined to avoid CORS issues */
+        .leaflet-pane,
+        .leaflet-tile,
+        .leaflet-marker-icon,
+        .leaflet-marker-shadow,
+        .leaflet-tile-container,
+        .leaflet-pane > svg,
+        .leaflet-pane > canvas,
+        .leaflet-zoom-box,
+        .leaflet-image-layer,
+        .leaflet-layer {
+            position: absolute;
+            left: 0;
+            top: 0;
+        }
+        .leaflet-container {
+            overflow: hidden;
+        }
+        .leaflet-tile,
+        .leaflet-marker-icon,
+        .leaflet-marker-shadow {
+            -webkit-user-select: none;
+               -moz-user-select: none;
+                    user-select: none;
+              -webkit-user-drag: none;
+        }
+        .leaflet-tile::selection {
+            background: transparent;
+        }
+        .leaflet-safari .leaflet-tile {
+            image-rendering: -webkit-optimize-contrast;
+        }
+        .leaflet-safari .leaflet-tile-container {
+            width: 1600px;
+            height: 1600px;
+            -webkit-transform-origin: 0 0;
+        }
+        .leaflet-marker-icon,
+        .leaflet-marker-shadow {
+            display: block;
+        }
+        .leaflet-container .leaflet-overlay-pane svg {
+            max-width: none !important;
+            max-height: none !important;
+        }
+        .leaflet-container .leaflet-marker-pane img,
+        .leaflet-container .leaflet-shadow-pane img,
+        .leaflet-container .leaflet-tile-pane img,
+        .leaflet-container img.leaflet-image-layer,
+        .leaflet-container .leaflet-tile {
+            max-width: none !important;
+            max-height: none !important;
+            width: auto;
+            padding: 0;
+        }
+        .leaflet-container img.leaflet-tile {
+            mix-blend-mode: plus-lighter;
+        }
+        .leaflet-container.leaflet-touch-zoom {
+            -ms-touch-action: pan-x pan-y;
+            touch-action: pan-x pan-y;
+        }
+        .leaflet-container.leaflet-touch-drag {
+            -ms-touch-action: pinch-zoom;
+            touch-action: none;
+            touch-action: pinch-zoom;
+        }
+        .leaflet-container.leaflet-touch-drag.leaflet-touch-zoom {
+            -ms-touch-action: none;
+            touch-action: none;
+        }
+        .leaflet-container {
+            -webkit-tap-highlight-color: transparent;
+        }
+        .leaflet-container a {
+            -webkit-tap-highlight-color: rgba(51, 181, 229, 0.4);
+        }
+        .leaflet-tile {
+            filter: inherit;
+            visibility: hidden;
+        }
+        .leaflet-tile-loaded {
+            visibility: inherit;
+        }
+        .leaflet-zoom-box {
+            width: 0;
+            height: 0;
+            -moz-box-sizing: border-box;
+                 box-sizing: border-box;
+            z-index: 800;
+        }
+        .leaflet-overlay-pane svg {
+            -moz-user-select: none;
+        }
+        .leaflet-pane         { z-index: 400; }
+        .leaflet-tile-pane    { z-index: 200; }
+        .leaflet-overlay-pane { z-index: 400; }
+        .leaflet-shadow-pane  { z-index: 500; }
+        .leaflet-marker-pane  { z-index: 600; }
+        .leaflet-tooltip-pane   { z-index: 650; }
+        .leaflet-popup-pane   { z-index: 700; }
+        .leaflet-map-pane canvas { z-index: 100; }
+        .leaflet-map-pane svg    { z-index: 200; }
+        .leaflet-vml-shape {
+            width: 1px;
+            height: 1px;
+        }
+        .lvml {
+            behavior: url(#default#VML);
+            display: inline-block;
+            position: absolute;
+        }
+        .leaflet-control {
+            position: relative;
+            z-index: 800;
+            pointer-events: visiblePainted;
+            pointer-events: auto;
+        }
+        .leaflet-top,
+        .leaflet-bottom {
+            position: absolute;
+            z-index: 1000;
+            pointer-events: none;
+        }
+        .leaflet-top {
+            top: 0;
+        }
+        .leaflet-right {
+            right: 0;
+        }
+        .leaflet-bottom {
+            bottom: 0;
+        }
+        .leaflet-left {
+            left: 0;
+        }
+        .leaflet-control {
+            float: left;
+            clear: both;
+        }
+        .leaflet-right .leaflet-control {
+            float: right;
+        }
+        .leaflet-top .leaflet-control {
+            margin-top: 10px;
+        }
+        .leaflet-bottom .leaflet-control {
+            margin-bottom: 10px;
+        }
+        .leaflet-left .leaflet-control {
+            margin-left: 10px;
+        }
+        .leaflet-right .leaflet-control {
+            margin-right: 10px;
+        }
+        .leaflet-fade-anim .leaflet-popup {
+            opacity: 0;
+            -webkit-transition: opacity 0.2s linear;
+               -moz-transition: opacity 0.2s linear;
+                    transition: opacity 0.2s linear;
+        }
+        .leaflet-fade-anim .leaflet-map-pane .leaflet-popup {
+            opacity: 1;
+        }
+        .leaflet-zoom-animated {
+            -webkit-transform-origin: 0 0;
+                -ms-transform-origin: 0 0;
+                    transform-origin: 0 0;
+        }
+        svg.leaflet-zoom-animated {
+            will-change: transform;
+        }
+        .leaflet-zoom-anim .leaflet-zoom-animated {
+            -webkit-transition: -webkit-transform 0.25s cubic-bezier(0,0,0.25,1);
+               -moz-transition:    -moz-transform 0.25s cubic-bezier(0,0,0.25,1);
+                    transition:         transform 0.25s cubic-bezier(0,0,0.25,1);
+        }
+        .leaflet-zoom-anim .leaflet-tile,
+        .leaflet-pan-anim .leaflet-tile {
+            -webkit-transition: none;
+               -moz-transition: none;
+                    transition: none;
+        }
+        .leaflet-zoom-anim .leaflet-zoom-hide {
+            visibility: hidden;
+        }
+        .leaflet-interactive {
+            cursor: pointer;
+        }
+        .leaflet-grab {
+            cursor: -webkit-grab;
+            cursor:    -moz-grab;
+            cursor:         grab;
+        }
+        .leaflet-crosshair,
+        .leaflet-crosshair .leaflet-interactive {
+            cursor: crosshair;
+        }
+        .leaflet-popup-pane,
+        .leaflet-control {
+            cursor: auto;
+        }
+        .leaflet-dragging .leaflet-grab,
+        .leaflet-dragging .leaflet-grab .leaflet-interactive,
+        .leaflet-dragging .leaflet-marker-draggable {
+            cursor: move;
+            cursor: -webkit-grabbing;
+            cursor:    -moz-grabbing;
+            cursor:         grabbing;
+        }
+        .leaflet-marker-icon,
+        .leaflet-marker-shadow,
+        .leaflet-image-layer,
+        .leaflet-pane > svg path,
+        .leaflet-tile-container {
+            pointer-events: none;
+        }
+        .leaflet-marker-icon.leaflet-interactive,
+        .leaflet-image-layer.leaflet-interactive,
+        .leaflet-pane > svg path.leaflet-interactive,
+        svg.leaflet-image-layer.leaflet-interactive path {
+            pointer-events: visiblePainted;
+            pointer-events: auto;
+        }
+        .leaflet-container {
+            background: #ddd;
+            outline-offset: 1px;
+        }
+        .leaflet-container a {
+            color: #0078A8;
+        }
+        .leaflet-zoom-box {
+            border: 2px dotted #38f;
+            background: rgba(255,255,255,0.5);
+        }
+        .leaflet-container {
+            font-family: "Helvetica Neue", Arial, Helvetica, sans-serif;
+            font-size: 12px;
+            font-size: 0.75rem;
+            line-height: 1.5;
+        }
+        .leaflet-bar {
+            box-shadow: 0 1px 5px rgba(0,0,0,0.65);
+            border-radius: 4px;
+        }
+        .leaflet-bar a {
+            background-color: #fff;
+            border-bottom: 1px solid #ccc;
+            width: 26px;
+            height: 26px;
+            line-height: 26px;
+            display: block;
+            text-align: center;
+            text-decoration: none;
+            color: black;
+        }
+        .leaflet-bar a,
+        .leaflet-control-layers-toggle {
+            background-position: 50% 50%;
+            background-repeat: no-repeat;
+            display: block;
+        }
+        .leaflet-bar a:hover,
+        .leaflet-bar a:focus {
+            background-color: #f4f4f4;
+        }
+        .leaflet-bar a:first-child {
+            border-top-left-radius: 4px;
+            border-top-right-radius: 4px;
+        }
+        .leaflet-bar a:last-child {
+            border-bottom-left-radius: 4px;
+            border-bottom-right-radius: 4px;
+            border-bottom: none;
+        }
+        .leaflet-bar a.leaflet-disabled {
+            cursor: default;
+            background-color: #f4f4f4;
+            color: #bbb;
+        }
+        .leaflet-touch .leaflet-bar a {
+            width: 30px;
+            height: 30px;
+            line-height: 30px;
+        }
+        .leaflet-touch .leaflet-bar a:first-child {
+            border-top-left-radius: 2px;
+            border-top-right-radius: 2px;
+        }
+        .leaflet-touch .leaflet-bar a:last-child {
+            border-bottom-left-radius: 2px;
+            border-bottom-right-radius: 2px;
+        }
+        .leaflet-control-zoom-in,
+        .leaflet-control-zoom-out {
+            font: bold 18px 'Lucida Console', Monaco, monospace;
+            text-indent: 1px;
+        }
+        .leaflet-touch .leaflet-control-zoom-in, .leaflet-touch .leaflet-control-zoom-out  {
+            font-size: 22px;
+        }
+
+        /* Application-specific styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            height: 100vh;
+            display: flex;
+            background: #f5f5f5;
+        }
+
+        .sidebar {
+            width: 380px;
+            background: white;
+            border-right: 2px solid #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .sidebar-header h1 {
+            font-size: 1.5em;
+            margin-bottom: 5px;
+        }
+
+        .sidebar-header p {
+            opacity: 0.9;
+            font-size: 0.9em;
+        }
+
+        .controls {
+            padding: 20px;
+            border-bottom: 1px solid #e0e0e0;
+            max-height: 50vh;
+            overflow-y: auto;
+        }
+
+        .turfs-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .town-selector {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .town-search {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .town-suggestions {
+            max-height: 150px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+            display: none;
+        }
+
+        .town-suggestion {
+            padding: 8px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+        }
+
+        .town-suggestion:hover {
+            background: #f0f4ff;
+        }
+
+        .town-suggestion:last-child {
+            border-bottom: none;
+        }
+
+        .selected-towns {
+            margin-top: 10px;
+        }
+
+        .town-tag {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            margin: 2px;
+            cursor: pointer;
+        }
+
+        .town-tag:hover {
+            background: #5a67d8;
+        }
+
+        .town-tag .remove {
+            margin-left: 5px;
+            font-weight: bold;
+        }
+
+        .neighborhood-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .neighborhood-input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .neighborhood-creation {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a67d8;
+            transform: translateY(-1px);
+        }
+
+        .btn-primary:disabled {
+            background: #a0aec0;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .btn-secondary:hover {
+            background: #cbd5e0;
+        }
+
+        .btn-danger {
+            background: #e53e3e;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c53030;
+        }
+
+        .btn-small {
+            padding: 4px 8px;
+            font-size: 12px;
+        }
+
+        .neighborhoods-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .neighborhood-item {
+            background: white;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border: 2px solid transparent;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .neighborhood-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+        }
+
+        .neighborhood-item.selected {
+            border-color: #667eea;
+            background: linear-gradient(135deg, #f0f4ff 0%, #e6f3ff 100%);
+        }
+
+        .neighborhood-item.editing {
+            cursor: default;
+            background: #f8f9fa;
+            border-color: #667eea;
+        }
+
+        .neighborhood-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .neighborhood-name {
+            font-weight: 700;
+            font-size: 1.1em;
+            color: #2d3748;
+        }
+
+        .neighborhood-count {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .neighborhood-stats {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .color-indicator {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+            border: 2px solid white;
+            box-shadow: 0 0 0 1px rgba(0,0,0,0.1);
+        }
+
+        .edit-btn, .delete-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 6px 8px;
+            border-radius: 4px;
+            transition: background 0.2s;
+            font-size: 14px;
+            line-height: 1;
+            margin-left: 4px;
+        }
+
+        .edit-btn {
+            color: #667eea;
+        }
+
+        .edit-btn:hover {
+            background: #e6f3ff;
+        }
+
+        .delete-btn {
+            color: #e53e3e;
+        }
+
+        .delete-btn:hover {
+            background: #fed7d7;
+        }
+
+        .edit-form {
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-top: 10px;
+        }
+
+        .edit-form input[type="text"] {
+            width: 100%;
+            padding: 6px;
+            margin-bottom: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .edit-form input[type="color"] {
+            width: 50px;
+            height: 30px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .edit-form-buttons {
+            display: flex;
+            gap: 5px;
+            margin-top: 8px;
+        }
+
+        /* Progress bar styles */
+        .progress-bar-container {
+            width: 100%;
+            height: 8px;
+            background: #e9ecef;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 8px 0;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        /* Parcel info section */
+        .parcel-info-section {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            display: none;
+        }
+
+        .parcel-info-section.visible {
+            display: block;
+        }
+
+        .parcel-info-section h4 {
+            margin: 0 0 10px 0;
+            color: #2d3748;
+            font-size: 0.95em;
+        }
+
+        .parcel-details {
+            background: white;
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            line-height: 1.4;
+            border: 1px solid #e2e8f0;
+        }
+
+        /* Collapsible sections */
+        .filter-section {
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: none;
+        }
+
+        .filter-section.visible {
+            display: block;
+        }
+
+        .filter-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .filter-header:hover {
+            background: #e9ecef;
+        }
+
+        .filter-header h4 {
+            margin: 0;
+            color: #2d3748;
+            font-size: 0.9em;
+        }
+
+        .filter-toggle {
+            font-size: 12px;
+            color: #666;
+            transition: transform 0.2s;
+        }
+
+        .filter-toggle.expanded {
+            transform: rotate(180deg);
+        }
+
+        .filter-content {
+            padding: 0 12px 12px;
+            display: none;
+        }
+
+        .filter-content.expanded {
+            display: block;
+        }
+
+        .filter-item {
+            margin-bottom: 8px;
+            font-size: 0.85em;
+        }
+
+        .filter-item label {
+            font-weight: normal;
+            font-size: 0.8em;
+            margin-bottom: 3px;
+        }
+
+        .filter-controls {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+        }
+
+        .filter-input {
+            flex: 1;
+            padding: 4px 6px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            font-size: 0.8em;
+            min-width: 50px;
+        }
+
+        .filter-select {
+            flex: 1;
+            padding: 4px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            font-size: 0.8em;
+            display: block;
+            min-width: 120px;
+        }
+
+        .range-separator {
+            margin: 0 3px;
+            font-size: 0.8em;
+            color: #666;
+            white-space: nowrap;
+        }
+
+        .active-filters {
+            background: #e6f3ff;
+            border-radius: 6px;
+            padding: 8px;
+            margin-bottom: 10px;
+        }
+
+        .filter-tag {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 12px;
+            font-size: 0.7em;
+            margin: 2px;
+            cursor: pointer;
+        }
+
+        .filter-tag:hover {
+            background: #5a67d8;
+        }
+
+        .undo-notification {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        .undo-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+            flex-wrap: wrap;
+        }
+
+        .radio-group {
+            margin: 10px 0;
+        }
+
+        .radio-option {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            cursor: pointer;
+        }
+
+        .radio-option input[type="radio"] {
+            margin-right: 8px;
+        }
+
+        .radio-option label {
+            cursor: pointer;
+            font-weight: normal;
+            margin-bottom: 0;
+        }
+
+        .checkbox-container {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 5px;
+            background: white;
+        }
+
+        .checkbox-option {
+            display: block;
+            padding: 3px 5px;
+            cursor: pointer;
+            font-size: 0.8em;
+            transition: background 0.2s;
+        }
+
+        .checkbox-option:hover {
+            background: #f0f4ff;
+        }
+
+        .checkbox-option input[type="checkbox"] {
+            margin-right: 6px;
+        }
+
+        .reference-layer-item {
+            background: white;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 8px;
+        }
+
+        .reference-layer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .reference-layer-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .reference-layer-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            font-size: 0.85em;
+        }
+
+        .reference-layer-controls label {
+            font-weight: normal;
+            margin-bottom: 2px;
+        }
+
+        .reference-layer-controls input[type="range"] {
+            width: 100%;
+        }
+
+        .reference-layer-controls input[type="color"] {
+            width: 30px;
+            height: 25px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+
+        #map {
+            flex: 1;
+            height: 100vh;
+        }
+
+        .instructions {
+            background: #e6f3ff;
+            border: 1px solid #bee3f8;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .instructions h3 {
+            color: #2b6cb0;
+            margin-bottom: 8px;
+        }
+
+        .instructions ul {
+            color: #2c5282;
+            margin-left: 20px;
+        }
+
+        .instructions li {
+            margin-bottom: 4px;
+        }
+
+        .status-message {
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-weight: 500;
+        }
+
+        .status-success {
+            background: #c6f6d5;
+            color: #22543d;
+            border: 1px solid #9ae6b4;
+        }
+
+        .status-error {
+            background: #fed7d7;
+            color: #742a2a;
+            border: 1px solid #feb2b2;
+        }
+
+        .status-loading {
+            background: #bee3f8;
+            color: #2b6cb0;
+            border: 1px solid #90cdf4;
+        }
+
+        .load-button {
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        .layer-switcher {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 5px;
+        }
+
+        .layer-switcher select {
+            border: none;
+            background: transparent;
+            padding: 5px;
+            font-size: 12px;
+        }
+
+        .search-hint {
+            font-style: italic;
+            color: #666;
+            font-size: 0.7em;
+        }
+        
+        /* Turf-specific styles (renamed from neighborhood) */
+        .turf-item {
+            background: white;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border: 2px solid transparent;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .turf-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+        }
+
+        .turf-item.selected {
+            border-color: #667eea;
+            background: linear-gradient(135deg, #f0f4ff 0%, #e6f3ff 100%);
+        }
+
+        .turf-item.editing {
+            cursor: default;
+            background: #f8f9fa;
+            border-color: #667eea;
+        }
+
+        .turf-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .turf-name {
+            font-weight: 700;
+            font-size: 1.1em;
+            color: #2d3748;
+        }
+
+        .turf-count {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .turf-stats {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .turf-creation {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .turf-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .turf-input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        /* Voter-specific styles */
+        .voter-list-item {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            font-size: 0.9em;
+        }
+
+        .voter-list-item:hover {
+            background: #f8f9fa;
+        }
+
+        .voter-import-section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 15px 0;
+        }
+
+        .import-method {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+        }
+
+        /* Debug fields styling */
+        .debug-fields {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 6px;
+            font-size: 0.9em;
+        }
+
+        .debug-fields strong {
+            color: #856404;
+        }
+
+        /* Cluster marker styles */
+        .custom-cluster-icon {
+            background: transparent !important;
+            border: none !important;
+        }
+
+        .cluster-marker {
+            position: relative;
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+        }
+
+        .cluster-circle {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            position: absolute;
+            top: 4px;
+            left: 4px;
+        }
+
+        .cluster-badge {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: #718096;
+            color: white;
+            border-radius: 50%;
+            min-width: 18px;
+            height: 18px;
+            font-size: 10px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 4px;
+            border: 2px solid white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            z-index: 1000;
+        }
+
+        /* Adjust marker hover styles for clusters */
+        .custom-cluster-icon:hover .cluster-badge {
+            transform: scale(1.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h1>Turf Builder</h1>
+            <p>Create canvassing turfs from voter data.</p>
+        </div>
+        
+        <div class="controls">
+            <div class="instructions">
+                <h3>How to use:</h3>
+                <ul>
+                    <li>Select Massachusetts towns to load parcel data</li>
+                    <li>Import voter data (CSV or Google Sheets)</li>
+                    <li>Create turfs, then click parcels to assign them</li>
+                    <li>Use filters and bulk assignment for efficiency</li>
+                    <li><b>Boston has significantly more parcels than other towns</b></li>
+                </ul>
+            </div>
+
+            <div class="control-group">
+                <label>Select Towns (up to 10):</label>
+                <div class="town-selector">
+                    <input type="text" id="townSearch" class="town-search" placeholder="Search Massachusetts towns..." autocomplete="off">
+                    <div id="townSuggestions" class="town-suggestions"></div>
+                    <div id="selectedTowns" class="selected-towns">
+                        <div style="font-size: 0.9em; color: #666; margin-bottom: 5px;">Selected towns:</div>
+                    </div>
+                    <button id="loadParcels" class="btn btn-primary load-button" disabled>Load Parcel Data</button>
+                </div>
+            </div>
+
+            <div id="statusMessage"></div>
+            <div id="importDialog"></div>
+            <div id="voterImportDialog"></div>
+            <div id="undoNotification"></div>
+
+            <!-- Parcel Info Section - Always visible after data loads -->
+            <div class="parcel-info-section" id="parcelInfoSection">
+                <h4>Selected Parcel</h4>
+                <div id="parcelDetails" class="parcel-details">
+                    <div style="color: #666; font-style: italic;">Hover over a parcel to see details<br>Click a parcel to keep it selected</div>
+                </div>
+            </div>
+
+            <!-- Voter Data Import Section -->
+            <div class="filter-section" id="voterImportSection">
+                <div class="filter-header" onclick="app.uiManager.toggleVoterImport()">
+                    <h4>Voter Data Import</h4>
+                    <span class="filter-toggle" id="voterImportToggle">▼</span>
+                </div>
+                <div class="filter-content" id="voterImportContent">
+                    <button onclick="app.uiManager.showVoterImportDialog()" class="btn btn-primary" style="width: 100%;">
+                        Import Voter Data
+                    </button>
+                    <div style="font-size: 0.85em; color: #666; margin-top: 8px; text-align: center;">
+                        Link voters to addresses via MASTER_ADDRESS_ID
+                    </div>
+                </div>
+            </div>
+
+            <!-- Field Display Controls -->
+            <div class="filter-section" id="fieldsSection">
+                <div class="filter-header" onclick="app.uiManager.toggleFields()">
+                    <h4>Fields to Display</h4>
+                    <span class="filter-toggle" id="fieldsToggle">▼</span>
+                </div>
+                <div class="filter-content" id="fieldsContent">
+                    <!-- Content populated by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Data Management Controls -->
+            <div class="filter-section" id="dataManagementSection">
+                <div class="filter-header" onclick="app.uiManager.toggleDataManagement()">
+                    <h4>Data Management</h4>
+                    <span class="filter-toggle" id="dataManagementToggle">▼</span>
+                </div>
+                <div class="filter-content" id="dataManagementContent">
+                    <!-- Content populated by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Reference Layers -->
+            <div class="filter-section" id="referenceLayersSection">
+                <div class="filter-header" onclick="app.uiManager.toggleReferenceLayers()">
+                    <h4>Reference Layers</h4>
+                    <span class="filter-toggle" id="referenceLayersToggle">▼</span>
+                </div>
+                <div class="filter-content" id="referenceLayersContent">
+                    <div id="referenceLayersList"></div>
+                </div>
+            </div>
+
+            <!-- Multi-Select Tools -->
+            <div class="filter-section" id="multiSelectSection">
+                <div class="filter-header" onclick="app.uiManager.toggleMultiSelect()">
+                    <h4>Selection Tools</h4>
+                    <span class="filter-toggle" id="multiSelectToggle">▼</span>
+                </div>
+                <div class="filter-content" id="multiSelectContent">
+                    <!-- Populated by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Filter Parcels -->
+            <div class="filter-section" id="parcelFilters">
+                <div class="filter-header" onclick="app.uiManager.toggleFilters()">
+                    <h4>Filter Parcels</h4>
+                    <span class="filter-toggle" id="filterToggle">▼</span>
+                </div>
+                <div class="filter-content" id="filterContent">
+                    <div id="activeFilters" class="active-filters" style="display: none;">
+                        <strong>Active Filters:</strong>
+                        <div id="filterTags"></div>
+                        <button onclick="app.uiManager.clearAllFilters()" class="btn btn-secondary btn-small" style="margin-top: 5px;">Clear All</button>
+                    </div>
+                    <div id="filterControls"></div>
+                </div>
+            </div>
+
+            <!-- Bulk Assignment -->
+            <div class="filter-section" id="bulkAssignment">
+                <div class="filter-header" onclick="app.uiManager.toggleBulkAssignment()">
+                    <h4>Bulk Assignment</h4>
+                    <span class="filter-toggle" id="bulkAssignmentToggle">▼</span>
+                </div>
+                <div class="filter-content" id="bulkAssignmentContent">
+                    <div id="bulkAssignmentControls"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="turfs-list" id="turfsList">
+            <p style="text-align: center; color: #666; font-style: italic;">Select towns above to load parcel data and start creating turfs!</p>
+        </div>
+    </div>
+
+    <div id="map">
+        <div class="layer-switcher">
+            <select id="layerSelect" onchange="app.changeBaseLayer(this.value)">
+                <option value="carto">CartoDB Light</option>
+                <option value="osm">OpenStreetMap</option>
+                <option value="esri">Esri World Imagery</option>
+                <option value="topo">OpenTopoMap</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Load external libraries -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"/>
+    <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/shpjs/6.1.0/shp.min.js"></script>
+
+    <!-- Load application modules -->
+    <script src="parcel-service.js"></script>
+    <script src="reference-layers.js"></script>
+    <script src="voter-service.js"></script>
+    <script src="turf-data-manager.js"></script>
+    <script src="turf-ui-manager.js"></script>
+    <script src="turf-builder-app.js"></script>
+    
+    <script>
+        // Global variables for debugging
+        let debugMode = true;
+        let app = null;
+        
+        function log(message, ...args) {
+            if (debugMode) {
+                console.log('[TurfBuilder]', message, ...args);
+            }
+        }
+        
+        function error(message, ...args) {
+            console.error('[TurfBuilder]', message, ...args);
+        }
+        
+        // Function to load Leaflet with fallbacks
+        async function loadLeaflet() {
+            if (typeof L !== 'undefined') {
+                log('Leaflet already loaded');
+                return true;
+            }
+            
+            const cdns = [
+                'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+                'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js',
+                'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js'
+            ];
+            
+            for (let cdn of cdns) {
+                try {
+                    log('Trying to load Leaflet from:', cdn);
+                    await new Promise((resolve, reject) => {
+                        const script = document.createElement('script');
+                        script.src = cdn;
+                        script.onload = resolve;
+                        script.onerror = reject;
+                        document.head.appendChild(script);
+                    });
+                    
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    
+                    if (typeof L !== 'undefined') {
+                        log('Leaflet loaded successfully from:', cdn);
+                        return true;
+                    }
+                } catch (err) {
+                    log('Failed to load from:', cdn, err);
+                    continue;
+                }
+            }
+            
+            return false;
+        }
+        
+        // Load shapefile parser
+        async function loadShpJS() {
+            try {
+                log('Loading shpjs...');
+                
+                const shpjsCdns = [
+                    'https://cdnjs.cloudflare.com/ajax/libs/shpjs/6.1.0/shp.min.js',
+                    'https://unpkg.com/shpjs@6.1.0/dist/shp.min.js'
+                ];
+                
+                for (let cdn of shpjsCdns) {
+                    try {
+                        log('Trying to load shpjs from:', cdn);
+                        await new Promise((resolve, reject) => {
+                            const script = document.createElement('script');
+                            script.src = cdn;
+                            script.onload = resolve;
+                            script.onerror = reject;
+                            document.head.appendChild(script);
+                        });
+                        
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                        
+                        if (typeof window.shp !== 'undefined') {
+                            log('shpjs loaded successfully from:', cdn);
+                            return true;
+                        }
+                    } catch (err) {
+                        log('Failed to load shpjs from:', cdn, err);
+                        continue;
+                    }
+                }
+                
+                error('All shpjs CDNs failed to load');
+                return false;
+                
+            } catch (err) {
+                error('Failed to load shpjs:', err);
+                return false;
+            }
+        }
+        
+        // Initialize everything
+        async function initialize() {
+            log('Starting initialization...');
+            
+            if (document.readyState === 'loading') {
+                await new Promise(resolve => {
+                    document.addEventListener('DOMContentLoaded', resolve);
+                });
+            }
+            
+            const leafletLoaded = await loadLeaflet();
+            if (!leafletLoaded) {
+                error('All Leaflet CDNs failed to load!');
+                document.getElementById('statusMessage').innerHTML = 
+                    '<div class="status-message status-error">Error: Failed to load mapping library from all CDNs. Please check your internet connection.</div>';
+                return;
+            }
+            
+            log('Leaflet loaded:', typeof L !== 'undefined' ? 'SUCCESS' : 'FAILED');
+            
+            const shpLoaded = await loadShpJS();
+            if (!shpLoaded) {
+                log('Warning: Shapefile library failed to load. Reference layer uploads will not work.');
+            }
+            
+            try {
+                log('Creating TurfBuilder instance...');
+                app = new TurfBuilder();
+                window.app = app;
+                log('TurfBuilder created successfully!');
+            } catch (err) {
+                error('Failed to create app:', err);
+                document.getElementById('statusMessage').innerHTML = 
+                    '<div class="status-message status-error">Error creating application: ' + err.message + '</div>';
+            }
+        }
+        
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initialize);
+        } else {
+            initialize();
+        }
+    </script>
+</body>
+</html>
