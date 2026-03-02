@@ -47,6 +47,8 @@ class TurfBuilder {
         this.dataManagementExpanded = false;
         this.filtersExpanded = false;
         this.bulkAssignmentExpanded = false;
+        this.kmeansExpanded = false;
+        this.printExpanded = false;
         this.referenceLayersExpanded = false;
         this.voterImportExpanded = true;  // NEW: voter import section
         
@@ -84,8 +86,9 @@ class TurfBuilder {
             this.voterService = new VoterService(this);  // NEW
             this.referenceLayerManager = new ReferenceLayerManager(this);
             this.dataManager = new DataManager(this);
+            this.printManager = new PrintManager(this);
             this.uiManager = new UIManager(this);
-            
+
             this.initMap();
             this.uiManager.showStatus('Ready! Select Massachusetts towns to load parcel data.', 'success');
             log('TurfBuilder initialized successfully');
@@ -358,7 +361,8 @@ class TurfBuilder {
                 const newTurf = {
                     name: turfName,
                     parcels: new Set(),
-                    color: this.colors[this.colorIndex % this.colors.length]
+                    color: this.colors[this.colorIndex % this.colors.length],
+                    locked: false
                 };
                 this.turfs.set(turfName, newTurf);
                 this.colorIndex++;
@@ -368,6 +372,7 @@ class TurfBuilder {
 
         // Assign parcels to turfs based on voter data
         let assignedCount = 0;
+        let skippedCount = 0;
         voterImportResult.votersByParcel.forEach((voters, masterId) => {
             // Get the turf name from the first voter with a turf field
             // (assuming all voters at an address belong to the same turf)
@@ -376,6 +381,11 @@ class TurfBuilder {
             if (voterWithTurf) {
                 const turfName = voterWithTurf.turf.trim();
                 const turf = this.turfs.get(turfName);
+
+                // Skip if target turf is locked
+                if (turf && turf.locked) {
+                    return;
+                }
 
                 if (turf) {
                     // Find parcel ID(s) for this MASTER_ADDRESS_ID
@@ -393,12 +403,24 @@ class TurfBuilder {
                             const parcelIds = cluster ? cluster.parcelIds : [parcelId];
 
                             parcelIds.forEach(pid => {
-                                // Remove from any existing turf first
-                                this.turfs.forEach(t => t.parcels.delete(pid));
+                                // Check if parcel is in a locked turf
+                                let isInLockedTurf = false;
+                                for (const t of this.turfs.values()) {
+                                    if (t.parcels.has(pid) && t.locked) {
+                                        isInLockedTurf = true;
+                                        skippedCount++;
+                                        break;
+                                    }
+                                }
 
-                                // Add to new turf
-                                turf.parcels.add(pid);
-                                assignedCount++;
+                                if (!isInLockedTurf) {
+                                    // Remove from any existing turf first
+                                    this.turfs.forEach(t => t.parcels.delete(pid));
+
+                                    // Add to new turf
+                                    turf.parcels.add(pid);
+                                    assignedCount++;
+                                }
                             });
                         }
                     });
@@ -413,10 +435,11 @@ class TurfBuilder {
         this.uiManager.updateTurfsList();
 
         // Show notification
-        this.uiManager.showStatus(
-            `Auto-assigned ${assignedCount} addresses to ${turfNames.size} turf(s) from CSV data`,
-            'success'
-        );
+        let statusMessage = `Auto-assigned ${assignedCount} addresses to ${turfNames.size} turf(s) from CSV data`;
+        if (skippedCount > 0) {
+            statusMessage += `. Skipped ${skippedCount} address(es) in locked turfs`;
+        }
+        this.uiManager.showStatus(statusMessage, 'success');
     }
 
     // Bulk assignment functionality
@@ -470,12 +493,22 @@ class TurfBuilder {
             const turf = {
                 name: targetTurf,
                 parcels: new Set(),
-                color: this.colors[this.colorIndex % this.colors.length]
+                color: this.colors[this.colorIndex % this.colors.length],
+                locked: false
             };
             this.colorIndex++;
             this.turfs.set(targetTurf, turf);
         }
-        
+
+        // Check if target turf is locked
+        if (targetTurf) {
+            const targetTurfObj = this.turfs.get(targetTurf);
+            if (targetTurfObj && targetTurfObj.locked) {
+                this.uiManager.showStatus(`Cannot assign to locked turf "${targetTurf}". Unlock it first.`, 'error');
+                return;
+            }
+        }
+
         let matchingParcels = [];
         
         this.parcelData.features.forEach(feature => {
@@ -537,12 +570,32 @@ class TurfBuilder {
             this.uiManager.showStatus('No parcels match the specified conditions', 'error');
             return;
         }
-        
-        matchingParcels.forEach(parcelId => {
+
+        // Filter out parcels from locked turfs
+        const assignableParcels = matchingParcels.filter(parcelId => {
+            for (const [name, turf] of this.turfs) {
+                if (turf.parcels.has(parcelId) && turf.locked) {
+                    return false; // Skip parcels in locked turfs
+                }
+            }
+            return true;
+        });
+
+        if (assignableParcels.length === 0) {
+            this.uiManager.showStatus('All matching parcels are in locked turfs. Unlock them first.', 'error');
+            return;
+        }
+
+        if (assignableParcels.length < matchingParcels.length) {
+            const skipped = matchingParcels.length - assignableParcels.length;
+            this.uiManager.showStatus(`Skipped ${skipped} address(es) in locked turfs`, 'warning');
+        }
+
+        assignableParcels.forEach(parcelId => {
             for (const [name, turf] of this.turfs) {
                 turf.parcels.delete(parcelId);
             }
-            
+
             if (targetTurf) {
                 const targetT = this.turfs.get(targetTurf);
                 if (targetT) {
@@ -553,12 +606,126 @@ class TurfBuilder {
         
         this.updateParcelStyles();
         this.uiManager.updateTurfsList();
-        
+
         const assignmentTarget = targetTurf || 'Unassigned';
-        this.uiManager.showStatus(`Bulk assignment completed! ${matchingParcels.length} parcels assigned to "${assignmentTarget}"`, 'success');
+        this.uiManager.showStatus(`Bulk assignment completed! ${assignableParcels.length} parcels assigned to "${assignmentTarget}"`, 'success');
         this.uiManager.showUndoNotification();
-        
-        log(`Bulk assignment: ${matchingParcels.length} parcels assigned to "${assignmentTarget}"`);
+
+        log(`Bulk assignment: ${assignableParcels.length} parcels assigned to "${assignmentTarget}"`);
+    }
+
+    performKMeansClustering() {
+        if (!this.parcelDataLoaded) {
+            this.uiManager.showStatus('Load parcel data first', 'error');
+            return;
+        }
+
+        const includeUnlocked = document.getElementById('includeUnlockedRoutes').checked;
+        const targetUnits = parseInt(document.getElementById('targetUnits').value);
+
+        if (!targetUnits || targetUnits < 1) {
+            this.uiManager.showStatus('Please enter a valid target units per route (minimum 1)', 'error');
+            return;
+        }
+
+        const unlockedTurfs = Array.from(this.turfs.values()).filter(t => !t.locked);
+
+        this.saveUndoState('K-means clustering assignment');
+
+        // Calculate how many turfs are optimal
+        let totalUnits = 0;
+        this.parcelData.features.forEach(feature => {
+            const parcelId = this.getParcelId(feature);
+            const currentTurf = this.findParcelTurf(parcelId);
+
+            // Skip if in locked turf
+            if (currentTurf && currentTurf.locked) return;
+
+            // Skip if already assigned and not including unlocked
+            if (!includeUnlocked && currentTurf) return;
+
+            // Count units at this address
+            const masterId = feature.properties.MASTER_ADDRESS_ID;
+            const voters = this.voterDataLoaded ?
+                this.voterService.getVotersForParcel(masterId) : [];
+
+            // Skip addresses with no voters when voter data is loaded
+            if (this.voterDataLoaded && voters.length === 0) return;
+
+            totalUnits += Math.max(voters.length, 1);
+        });
+
+        const optimalK = Math.max(1, Math.ceil(totalUnits / targetUnits));
+        const currentUnlocked = unlockedTurfs.length;
+
+        // Auto-create missing turfs if needed
+        if (optimalK > currentUnlocked) {
+            const turfsToCreate = optimalK - currentUnlocked;
+            const turfNumberStart = this.turfs.size + 1;
+
+            for (let i = 0; i < turfsToCreate; i++) {
+                const turfName = `Route ${turfNumberStart + i}`;
+                const turf = {
+                    name: turfName,
+                    parcels: new Set(),
+                    color: this.colors[this.colorIndex % this.colors.length],
+                    locked: false
+                };
+                this.turfs.set(turfName, turf);
+                this.colorIndex++;
+                unlockedTurfs.push(turf);
+            }
+
+            this.uiManager.updateTurfsList();
+            this.uiManager.showStatus(
+                `Auto-created ${turfsToCreate} new turf(s) for optimal distribution`,
+                'success'
+            );
+        }
+
+        // Verify we have turfs after potential auto-creation
+        if (unlockedTurfs.length === 0) {
+            this.uiManager.showStatus('No unlocked turfs available for assignment', 'error');
+            return;
+        }
+
+        const clustering = new KMeansClustering(this);
+        clustering.clusterAndAssign({
+            includeUnlockedRoutes: includeUnlocked,
+            targetUnitsPerRoute: targetUnits,
+            unlockedTurfs: unlockedTurfs
+        });
+
+        this.updateParcelStyles();
+        this.uiManager.updateTurfsList();
+        this.uiManager.showUndoNotification();
+    }
+
+    printSelectedTurf() {
+        if (!this.selectedTurf) {
+            this.uiManager.showStatus('Please select a turf to print', 'error');
+            return;
+        }
+
+        this.printManager.printTurf(this.selectedTurf);
+    }
+
+    printAllTurfs() {
+        if (this.turfs.size === 0) {
+            this.uiManager.showStatus('No turfs to print', 'error');
+            return;
+        }
+
+        this.printManager.printAllTurfs(false);
+    }
+
+    printLockedTurfs() {
+        if (this.turfs.size === 0) {
+            this.uiManager.showStatus('No turfs to print', 'error');
+            return;
+        }
+
+        this.printManager.printAllTurfs(true);
     }
 
     // Undo system methods
@@ -773,32 +940,63 @@ class TurfBuilder {
 
     addTurf() {
         const nameInput = document.getElementById('turfName');
-        const name = nameInput.value.trim();
-        
-        if (!name) {
+        const input = nameInput.value.trim();
+
+        if (!input) {
             this.uiManager.showStatus('Please enter a turf name.', 'error');
             return;
         }
 
-        if (this.turfs.has(name)) {
-            this.uiManager.showStatus('A turf with this name already exists.', 'error');
-            return;
+        // Split by comma for bulk creation
+        const names = input.split(',').map(n => n.trim()).filter(n => n);
+
+        const created = [];
+        const skipped = [];
+
+        names.forEach(name => {
+            if (this.turfs.has(name)) {
+                skipped.push(name);
+                return;
+            }
+
+            const turf = {
+                name: name,
+                parcels: new Set(),
+                color: this.colors[this.colorIndex % this.colors.length],
+                locked: false
+            };
+
+            this.colorIndex++;
+            this.turfs.set(name, turf);
+            created.push(name);
+        });
+
+        nameInput.value = '';
+
+        // Select the last created turf
+        if (created.length > 0) {
+            this.selectedTurf = created[created.length - 1];
         }
 
-        const turf = {
-            name: name,
-            parcels: new Set(),
-            color: this.colors[this.colorIndex % this.colors.length]
-        };
-
-        this.colorIndex++;
-        this.turfs.set(name, turf);
-        nameInput.value = '';
-        
-        this.selectedTurf = name;
-        
         this.uiManager.updateTurfsList();
-        this.uiManager.showStatus(`Turf "${name}" created and selected!`, 'success');
+
+        // Show summary status
+        let message = '';
+        if (created.length > 0) {
+            message = `Created ${created.length} turf(s)`;
+            if (created.length <= 5) {
+                message += `: ${created.join(', ')}`;
+            }
+        }
+        if (skipped.length > 0) {
+            if (message) message += '. ';
+            message += `Skipped ${skipped.length} duplicate(s)`;
+            if (skipped.length <= 5) {
+                message += `: ${skipped.join(', ')}`;
+            }
+        }
+
+        this.uiManager.showStatus(message, created.length > 0 ? 'success' : 'error');
     }
 
     selectTurf(name) {
@@ -821,6 +1019,12 @@ class TurfBuilder {
     }
 
     startEdit(name) {
+        const turf = this.turfs.get(name);
+        if (turf && turf.locked) {
+            this.uiManager.showStatus(`Cannot edit locked turf "${name}". Unlock it first.`, 'error');
+            return;
+        }
+
         if (this.editingTurf) {
             this.cancelEdit();
         }
@@ -829,25 +1033,33 @@ class TurfBuilder {
     }
 
     saveEdit(name) {
+        const turf = this.turfs.get(name);
+
+        // Check if turf is locked
+        if (turf && turf.locked) {
+            this.uiManager.showStatus(`Cannot edit locked turf "${name}". Unlock it first.`, 'error');
+            this.editingTurf = null;
+            this.uiManager.updateTurfsList();
+            return;
+        }
+
         const nameInput = document.getElementById(`edit_name_${name}`);
         const colorInput = document.getElementById(`edit_color_${name}`);
-        
+
         if (!nameInput || !colorInput) return;
-        
+
         const newName = nameInput.value.trim();
         const newColor = colorInput.value;
-        
+
         if (!newName) {
             this.uiManager.showStatus('Please enter a turf name.', 'error');
             return;
         }
-        
+
         if (newName !== name && this.turfs.has(newName)) {
             this.uiManager.showStatus('A turf with this name already exists.', 'error');
             return;
         }
-        
-        const turf = this.turfs.get(name);
         
         if (newName !== name) {
             this.turfs.delete(name);
@@ -873,9 +1085,15 @@ class TurfBuilder {
     }
 
     deleteTurf(name) {
+        const turf = this.turfs.get(name);
+        if (turf && turf.locked) {
+            this.uiManager.showStatus(`Cannot delete locked turf "${name}". Unlock it first.`, 'error');
+            return;
+        }
+
         if (confirm(`Are you sure you want to delete "${name}" turf?`)) {
             this.saveUndoState(`Delete turf "${name}"`);
-            
+
             this.turfs.delete(name);
             if (this.selectedTurf === name) {
                 this.selectedTurf = null;
@@ -887,7 +1105,45 @@ class TurfBuilder {
             this.updateParcelStyles();
             this.uiManager.showStatus(`Turf "${name}" deleted.`, 'success');
             this.uiManager.showUndoNotification();
+            this.uiManager.updateKMeansPreview();
         }
+    }
+
+    toggleTurfLock(name) {
+        const turf = this.turfs.get(name);
+        if (turf) {
+            this.saveUndoState(`${turf.locked ? 'Unlock' : 'Lock'} turf "${name}"`);
+            turf.locked = !turf.locked;
+            this.uiManager.updateTurfsList();
+            this.uiManager.showStatus(
+                `Turf "${name}" ${turf.locked ? 'locked' : 'unlocked'}`,
+                'success'
+            );
+            this.uiManager.showUndoNotification();
+            this.uiManager.updateKMeansPreview();
+        }
+    }
+
+    lockAllTurfs() {
+        this.saveUndoState('Lock all turfs');
+        for (const turf of this.turfs.values()) {
+            turf.locked = true;
+        }
+        this.uiManager.updateTurfsList();
+        this.uiManager.showStatus('All turfs locked', 'success');
+        this.uiManager.showUndoNotification();
+        this.uiManager.updateKMeansPreview();
+    }
+
+    unlockAllTurfs() {
+        this.saveUndoState('Unlock all turfs');
+        for (const turf of this.turfs.values()) {
+            turf.locked = false;
+        }
+        this.uiManager.updateTurfsList();
+        this.uiManager.showStatus('All turfs unlocked', 'success');
+        this.uiManager.showUndoNotification();
+        this.uiManager.updateKMeansPreview();
     }
 
     toggleParcelAssignment(parcelId, feature) {
@@ -896,15 +1152,30 @@ class TurfBuilder {
         }
 
         const turf = this.turfs.get(this.selectedTurf);
+
+        // Check if selected turf is locked
+        if (turf.locked) {
+            this.uiManager.showStatus(`Cannot modify locked turf "${this.selectedTurf}". Unlock it first.`, 'error');
+            return;
+        }
+
         let currentTurf = null;
-        
+        let currentTurfObj = null;
+
         for (const [name, t] of this.turfs) {
             if (t.parcels.has(parcelId)) {
                 currentTurf = name;
+                currentTurfObj = t;
                 break;
             }
         }
-        
+
+        // Check if parcel is in a locked turf
+        if (currentTurf && currentTurfObj.locked && currentTurf !== this.selectedTurf) {
+            this.uiManager.showStatus(`Cannot reassign address from locked turf "${currentTurf}". Unlock it first.`, 'error');
+            return;
+        }
+
         if (currentTurf === this.selectedTurf) {
             turf.parcels.delete(parcelId);
         } else {
@@ -1167,10 +1438,36 @@ class TurfBuilder {
 
         if (this.selectedParcels.size === 0) return;
 
+        const turf = this.turfs.get(this.selectedTurf);
+
+        // Check if selected turf is locked
+        if (turf.locked) {
+            this.uiManager.showStatus(`Cannot modify locked turf "${this.selectedTurf}". Unlock it first.`, 'error');
+            return;
+        }
+
+        // Check if any selected parcels are in locked turfs
+        const lockedParcels = [];
+        this.selectedParcels.forEach(parcelId => {
+            for (const [name, t] of this.turfs) {
+                if (t.parcels.has(parcelId) && t.locked) {
+                    lockedParcels.push({parcelId, turfName: name});
+                }
+            }
+        });
+
+        if (lockedParcels.length > 0) {
+            const lockedTurfs = [...new Set(lockedParcels.map(p => p.turfName))];
+            this.uiManager.showStatus(
+                `Cannot reassign ${lockedParcels.length} address(es) from locked turf(s): ${lockedTurfs.join(', ')}. Unlock them first.`,
+                'error'
+            );
+            return;
+        }
+
         const count = this.selectedParcels.size;
         this.saveUndoState(`Assign ${count} points to ${this.selectedTurf}`);
 
-        const turf = this.turfs.get(this.selectedTurf);
         this.selectedParcels.forEach(parcelId => {
             // Remove from all turfs
             for (const [, t] of this.turfs) {

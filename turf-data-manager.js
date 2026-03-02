@@ -196,7 +196,7 @@ class DataManager {
 
         try {
             // Build headers
-            const headers = ['MASTER_ADDRESS_ID', 'Turf', 'Address'];
+            const headers = ['MASTER_ADDRESS_ID', 'Turf', 'Locked', 'Address'];
 
             // Add voter fields if voter data is loaded
             if (this.app.voterDataLoaded) {
@@ -227,6 +227,7 @@ class DataManager {
                             const row = [
                                 `"${objectId}"`,
                                 `"${turf ? turf.name : ''}"`,
+                                `"${turf && turf.locked ? 'Yes' : 'No'}"`,
                                 `"${address}"`
                             ];
 
@@ -244,18 +245,19 @@ class DataManager {
                         const row = [
                             `"${objectId}"`,
                             `"${turf ? turf.name : ''}"`,
+                            `"${turf && turf.locked ? 'Yes' : 'No'}"`,
                             `"${address}"`
                         ];
 
                         // Empty voter fields
                         const voterFields = this.app.voterService.getAvailableVoterFields();
                         voterFields.forEach(() => row.push('""'));
-                        
+
                         csvContent += row.join(',') + '\n';
                     }
                 } else {
                     // No voter data - just export parcel info
-                    csvContent += `"${locId}","${turf ? turf.name : ''}","${address}"\n`;
+                    csvContent += `"${objectId}","${turf ? turf.name : ''}","${turf && turf.locked ? 'Yes' : 'No'}","${address}"\n`;
                 }
             });
 

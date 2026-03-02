@@ -1,0 +1,25 @@
+[TurfBuilder] Undo state saved: K-means clustering assignment
+turf-builder-complete.html:1429 [TurfBuilder] Starting K-means clustering with target: 40 units per route
+turf-builder-complete.html:1429 [TurfBuilder] Include unlocked routes: false
+turf-builder-complete.html:1429 [TurfBuilder] Found 8060 address clusters with 10695 total units
+turf-builder-complete.html:1429 [TurfBuilder] Found 1 oversized address cluster(s)
+turf-builder-complete.html:1429 [TurfBuilder] Using 130 clusters (optimal: 268, available turfs: 130)
+kmeans-clustering.js:35 Uncaught TypeError: addressClusters[firstIdx].centroid is not iterable
+    at KMeansClustering.initializeCentroids (kmeans-clustering.js:35:54)
+    at KMeansClustering.performKMeans (kmeans-clustering.js:125:30)
+    at KMeansClustering.clusterAndAssign (kmeans-clustering.js:284:49)
+    at TurfBuilder.performKMeansClustering (turf-builder-app.js:640:20)
+    at runButton.onclick (turf-ui-manager.js:784:52)Understand this error
+turf-builder-complete.html:1429 [TurfBuilder] Undo notification hidden
+turf-builder-complete.html:1429 [TurfBuilder] Undo state saved: K-means clustering assignment
+turf-builder-complete.html:1429 [TurfBuilder] Starting K-means clustering with target: 40 units per route
+turf-builder-complete.html:1429 [TurfBuilder] Include unlocked routes: true
+turf-builder-complete.html:1429 [TurfBuilder] Found 12018 address clusters with 17794 total units
+turf-builder-complete.html:1429 [TurfBuilder] Found 10 oversized address cluster(s)
+turf-builder-complete.html:1429 [TurfBuilder] Using 130 clusters (optimal: 445, available turfs: 130)
+kmeans-clustering.js:35 Uncaught TypeError: addressClusters[firstIdx].centroid is not iterable
+    at KMeansClustering.initializeCentroids (kmeans-clustering.js:35:54)
+    at KMeansClustering.performKMeans (kmeans-clustering.js:125:30)
+    at KMeansClustering.clusterAndAssign (kmeans-clustering.js:284:49)
+    at TurfBuilder.performKMeansClustering (turf-builder-app.js:640:20)
+    at runButton.onclick (turf-ui-manager.js:784:52)

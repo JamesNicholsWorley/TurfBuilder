@@ -54,6 +54,8 @@ class VoterService {
             'voted_2024': '2024',
             'voted_2025': '2025',
             'household_count': 'Household Size',
+            'score': 'Score',
+            'notes': 'Notes',
             // Address point fields
             'POINT_TYPE': 'Address Type',
             'STREETNAME': 'Street Name',

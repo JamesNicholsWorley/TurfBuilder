@@ -1004,6 +1004,41 @@
             border-color: #667eea;
         }
 
+        .turf-item.locked {
+            opacity: 0.85;
+            border-left: 4px solid #ff9800;
+            background: linear-gradient(135deg, #fff5e6 0%, #ffe6cc 100%);
+        }
+
+        .turf-item.locked .color-indicator {
+            opacity: 0.6;
+        }
+
+        .lock-btn {
+            background: none;
+            border: none;
+            font-size: 16px;
+            cursor: pointer;
+            padding: 4px 6px;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+
+        .lock-btn:hover {
+            background: rgba(0,0,0,0.05);
+        }
+
+        .turf-item.locked .edit-btn,
+        .turf-item.locked .delete-btn {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .turf-item.locked .edit-btn.disabled,
+        .turf-item.locked .delete-btn.disabled {
+            pointer-events: none;
+        }
+
         .turf-header {
             display: flex;
             justify-content: space-between;
@@ -1269,6 +1304,95 @@
                     <div id="bulkAssignmentControls"></div>
                 </div>
             </div>
+
+            <!-- K-means Auto-Assignment -->
+            <div class="filter-section" id="kmeansSection">
+                <div class="filter-header" onclick="app.uiManager.toggleKMeans()">
+                    <h4>Auto-Assignment (K-means)</h4>
+                    <span class="filter-toggle" id="kmeansToggle">▶</span>
+                </div>
+                <div class="filter-content" id="kmeansContent" style="display: none;">
+                    <div class="control-group">
+                        <label>Target Units per Route:</label>
+                        <input type="number" id="targetUnits" value="40" min="1" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 10px;" />
+
+                        <div id="kmeansPreview" style="background: #e6f3ff; padding: 10px; border-radius: 4px; margin: 10px 0; font-size: 0.85em; display: none;">
+                            <strong>Preview:</strong>
+                            <div id="kmeansStats" style="margin-top: 5px; line-height: 1.6;">
+                                Configure settings to see preview
+                            </div>
+                        </div>
+
+                        <label style="display: flex; align-items: center; margin-bottom: 10px; cursor: pointer;">
+                            <input type="checkbox" id="includeUnlockedRoutes" style="margin-right: 8px;" />
+                            <span>Include addresses from unlocked routes</span>
+                        </label>
+
+                        <button id="runKMeans" class="btn btn-primary" style="width: 100%; margin-top: 10px;">
+                            Auto-Assign with K-means
+                        </button>
+
+                        <div style="margin-top: 10px; padding: 10px; background: #f0f4ff; border-radius: 4px; font-size: 0.85em; color: #4a5568;">
+                            <strong>How it works:</strong> Distributes addresses among routes based on geographic proximity. If more turfs are needed to meet your target, they will be auto-created as "Route X". Respects locked routes.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Print Routes -->
+            <div class="filter-section" id="printSection">
+                <div class="filter-header" onclick="app.uiManager.togglePrint()">
+                    <h4>Print Routes</h4>
+                    <span class="filter-toggle" id="printToggle">▶</span>
+                </div>
+                <div class="filter-content" id="printContent" style="display: none;">
+                    <div class="control-group">
+                        <label>Voter Fields to Print:</label>
+                        <div id="printFieldsCheckboxes" style="margin-bottom: 10px; max-height: 150px; overflow-y: auto; border: 1px solid #ddd; padding: 8px; border-radius: 4px;">
+                            <label style="display: block; margin-bottom: 4px; cursor: pointer;">
+                                <input type="checkbox" value="full_name" checked style="margin-right: 6px;"> Name
+                            </label>
+                            <label style="display: block; margin-bottom: 4px; cursor: pointer;">
+                                <input type="checkbox" value="party" checked style="margin-right: 6px;"> Party
+                            </label>
+                            <label style="display: block; margin-bottom: 4px; cursor: pointer;">
+                                <input type="checkbox" value="precinct" checked style="margin-right: 6px;"> Precinct
+                            </label>
+                            <label style="display: block; margin-bottom: 4px; cursor: pointer;">
+                                <input type="checkbox" value="voted_2023" checked style="margin-right: 6px;"> 2023
+                            </label>
+                            <label style="display: block; margin-bottom: 4px; cursor: pointer;">
+                                <input type="checkbox" value="voted_2024" checked style="margin-right: 6px;"> 2024
+                            </label>
+                            <label style="display: block; margin-bottom: 4px; cursor: pointer;">
+                                <input type="checkbox" value="voted_2025" checked style="margin-right: 6px;"> 2025
+                            </label>
+                            <label style="display: block; margin-bottom: 4px; cursor: pointer;">
+                                <input type="checkbox" value="score" checked style="margin-right: 6px;"> Score
+                            </label>
+                            <label style="display: block; margin-bottom: 4px; cursor: pointer;">
+                                <input type="checkbox" value="notes" checked style="margin-right: 6px;"> Notes
+                            </label>
+                        </div>
+
+                        <button id="printSelectedTurf" class="btn btn-primary" style="width: 100%; margin-bottom: 8px;">
+                            Print Selected Turf
+                        </button>
+
+                        <button id="printAllTurfs" class="btn btn-secondary" style="width: 100%; margin-bottom: 8px;">
+                            Print All Turfs
+                        </button>
+
+                        <button id="printLockedTurfs" class="btn btn-secondary" style="width: 100%;">
+                            Print Locked Routes
+                        </button>
+
+                        <div style="margin-top: 10px; padding: 10px; background: #f0f4ff; border-radius: 4px; font-size: 0.85em; color: #4a5568;">
+                            <strong>How it works:</strong> Generates a printable walk list with a map page (CartoDB Light) and voter information sorted by address. All routes are combined in one window.
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="turfs-list" id="turfsList">
@@ -1297,6 +1421,8 @@
     <script src="parcel-service.js"></script>
     <script src="reference-layers.js"></script>
     <script src="voter-service.js"></script>
+    <script src="kmeans-clustering.js"></script>
+    <script src="print-manager.js"></script>
     <script src="turf-data-manager.js"></script>
     <script src="turf-ui-manager.js"></script>
     <script src="turf-builder-app.js"></script>

@@ -475,11 +475,30 @@ class UIManager {
     showClusterInfo(parcelIds) {
         if (!parcelIds || parcelIds.length === 0) return;
 
-        let infoHtml = `<strong>Multi-Unit Building (${parcelIds.length} units)</strong><br><br>`;
+        // Filter out units without voters if setting is enabled
+        let displayParcelIds = parcelIds;
+        if (this.app.hideAddressesWithoutVoters && this.app.voterDataLoaded) {
+            displayParcelIds = parcelIds.filter(parcelId => {
+                const feature = this.app.parcelFeatureMap.get(parcelId);
+                if (!feature) return false;
+                const voters = this.app.voterService.getVotersForParcel(
+                    feature.properties.MASTER_ADDRESS_ID
+                );
+                return voters.length > 0;
+            });
+        }
+
+        // If all units filtered out, don't show cluster info
+        if (displayParcelIds.length === 0) {
+            this.showDefaultParcelInfo();
+            return;
+        }
+
+        let infoHtml = `<strong>Multi-Unit Building (${displayParcelIds.length} units)</strong><br><br>`;
 
         let totalVoters = 0;
 
-        parcelIds.forEach((parcelId, index) => {
+        displayParcelIds.forEach((parcelId, index) => {
             const feature = this.app.parcelFeatureMap.get(parcelId);
             if (!feature) return;
 
@@ -754,13 +773,136 @@ class UIManager {
         this.app.bulkAssignmentExpanded = !this.app.bulkAssignmentExpanded;
         const content = document.getElementById('bulkAssignmentContent');
         const toggle = document.getElementById('bulkAssignmentToggle');
-        
+
         if (this.app.bulkAssignmentExpanded) {
             content.classList.add('expanded');
             toggle.classList.add('expanded');
         } else {
             content.classList.remove('expanded');
             toggle.classList.remove('expanded');
+        }
+    }
+
+    toggleKMeans() {
+        this.app.kmeansExpanded = !this.app.kmeansExpanded;
+        const content = document.getElementById('kmeansContent');
+        const toggle = document.getElementById('kmeansToggle');
+
+        if (this.app.kmeansExpanded) {
+            content.style.display = 'block';
+            toggle.textContent = '▼';
+        } else {
+            content.style.display = 'none';
+            toggle.textContent = '▶';
+        }
+
+        // Bind the run button event when expanded
+        if (this.app.kmeansExpanded) {
+            const runButton = document.getElementById('runKMeans');
+            if (runButton) {
+                runButton.onclick = () => this.app.performKMeansClustering();
+            }
+
+            // Bind preview update events
+            const targetUnitsInput = document.getElementById('targetUnits');
+            const includeUnlockedCheckbox = document.getElementById('includeUnlockedRoutes');
+
+            if (targetUnitsInput) {
+                targetUnitsInput.addEventListener('input', () => this.updateKMeansPreview());
+            }
+
+            if (includeUnlockedCheckbox) {
+                includeUnlockedCheckbox.addEventListener('change', () => this.updateKMeansPreview());
+            }
+
+            // Initial preview update
+            this.updateKMeansPreview();
+        }
+    }
+
+    updateKMeansPreview() {
+        const previewDiv = document.getElementById('kmeansPreview');
+        const statsDiv = document.getElementById('kmeansStats');
+
+        if (!this.app.parcelDataLoaded) {
+            previewDiv.style.display = 'none';
+            return;
+        }
+
+        const targetUnits = parseInt(document.getElementById('targetUnits').value);
+        const includeUnlocked = document.getElementById('includeUnlockedRoutes').checked;
+
+        if (!targetUnits || targetUnits < 1) {
+            previewDiv.style.display = 'none';
+            return;
+        }
+
+        // Calculate total available units
+        let totalUnits = 0;
+        this.app.parcelData.features.forEach(feature => {
+            const parcelId = this.app.getParcelId(feature);
+            const currentTurf = this.app.findParcelTurf(parcelId);
+
+            if (currentTurf && currentTurf.locked) return;
+            if (!includeUnlocked && currentTurf) return;
+
+            const masterId = feature.properties.MASTER_ADDRESS_ID;
+            const voters = this.app.voterDataLoaded ?
+                this.app.voterService.getVotersForParcel(masterId) : [];
+
+            // Skip addresses with no voters when voter data is loaded
+            if (this.app.voterDataLoaded && voters.length === 0) return;
+
+            totalUnits += Math.max(voters.length, 1);
+        });
+
+        const optimalK = Math.max(1, Math.ceil(totalUnits / targetUnits));
+        const unlockedCount = Array.from(this.app.turfs.values()).filter(t => !t.locked).length;
+        const willCreate = Math.max(0, optimalK - unlockedCount);
+
+        previewDiv.style.display = 'block';
+        statsDiv.innerHTML = `
+            • Total units to distribute: <strong>${totalUnits}</strong><br>
+            • Target per route: <strong>${targetUnits}</strong><br>
+            • Optimal turfs needed: <strong>${optimalK}</strong><br>
+            • Current unlocked turfs: <strong>${unlockedCount}</strong><br>
+            ${willCreate > 0 ?
+                `<span style="color: #2c5282;">➜ Will auto-create <strong>${willCreate}</strong> new turf(s)</span>` :
+                `<span style="color: #22543d;">✓ Sufficient turfs available</span>`
+            }
+        `;
+    }
+
+    togglePrint() {
+        this.app.printExpanded = !this.app.printExpanded;
+        const content = document.getElementById('printContent');
+        const toggle = document.getElementById('printToggle');
+
+        if (this.app.printExpanded) {
+            content.style.display = 'block';
+            toggle.textContent = '▼';
+        } else {
+            content.style.display = 'none';
+            toggle.textContent = '▶';
+        }
+
+        // Bind print button events when expanded
+        if (this.app.printExpanded) {
+            const printSelectedButton = document.getElementById('printSelectedTurf');
+            const printAllButton = document.getElementById('printAllTurfs');
+            const printLockedButton = document.getElementById('printLockedTurfs');
+
+            if (printSelectedButton) {
+                printSelectedButton.onclick = () => this.app.printSelectedTurf();
+            }
+
+            if (printAllButton) {
+                printAllButton.onclick = () => this.app.printAllTurfs();
+            }
+
+            if (printLockedButton) {
+                printLockedButton.onclick = () => this.app.printLockedTurfs();
+            }
         }
     }
 
@@ -1421,7 +1563,7 @@ class UIManager {
             parcelInfoSection.classList.add('visible');
         }
         
-        const controlSections = ['fieldsSection', 'dataManagementSection', 'voterImportSection', 'referenceLayersSection', 'parcelFilters', 'bulkAssignment', 'multiSelectSection'];
+        const controlSections = ['fieldsSection', 'dataManagementSection', 'voterImportSection', 'referenceLayersSection', 'parcelFilters', 'bulkAssignment', 'kmeansSection', 'printSection', 'multiSelectSection'];
         controlSections.forEach(sectionId => {
             const section = document.getElementById(sectionId);
             if (section) {
@@ -1452,13 +1594,28 @@ class UIManager {
             <div class="control-group">
                 <label>Create New Turf:</label>
                 <div class="turf-controls">
-                    <input type="text" id="turfName" class="turf-input" placeholder="Turf name..." />
+                    <input type="text" id="turfName" class="turf-input" placeholder="Route 1, Route 2, Route 3..." />
                     <button id="addTurf" class="btn btn-primary">Add</button>
+                </div>
+                <div style="font-size: 0.75em; color: #666; margin-top: 4px;">
+                    Tip: Separate multiple names with commas for bulk creation
                 </div>
             </div>
         `;
         fragment.appendChild(creationDiv);
-        
+
+        // Add Lock All / Unlock All buttons if there are turfs
+        if (this.app.turfs.size > 0) {
+            const lockControlsDiv = document.createElement('div');
+            lockControlsDiv.className = 'lock-controls';
+            lockControlsDiv.style.cssText = 'margin: 10px 0; display: flex; gap: 8px; flex-wrap: wrap;';
+            lockControlsDiv.innerHTML = `
+                <button id="lockAllTurfs" class="btn btn-secondary btn-small" title="Lock all turfs to prevent editing">Lock All</button>
+                <button id="unlockAllTurfs" class="btn btn-secondary btn-small" title="Unlock all turfs">Unlock All</button>
+            `;
+            fragment.appendChild(lockControlsDiv);
+        }
+
         if (this.app.turfs.size === 0) {
             const emptyDiv = document.createElement('div');
             emptyDiv.style.textAlign = 'center';
@@ -1504,8 +1661,8 @@ class UIManager {
                 }
                 
                 const div = document.createElement('div');
-                div.className = `turf-item ${isSelected ? 'selected' : ''} ${isEditing ? 'editing' : ''}`;
-                
+                div.className = `turf-item ${isSelected ? 'selected' : ''} ${isEditing ? 'editing' : ''} ${turf.locked ? 'locked' : ''}`;
+
                 if (isEditing) {
                     div.innerHTML = `
                         <div class="edit-form">
@@ -1537,16 +1694,20 @@ class UIManager {
                         statsText += ' • Currently selected';
                     }
                     
+                    const lockIcon = turf.locked ? '🔒' : '🔓';
+                    const lockTitle = turf.locked ? 'Unlock turf' : 'Lock turf';
+
                     div.innerHTML = `
                         <div class="turf-header">
                             <div>
-                                <span class="color-indicator" data-action="edit-color" data-turf="${name}" style="background-color: ${turf.color}; cursor: pointer;" title="Click to edit color"></span>
+                                <span class="color-indicator" data-action="edit-color" data-turf="${name}" style="background-color: ${turf.color}; cursor: ${turf.locked ? 'not-allowed' : 'pointer'};" title="${turf.locked ? 'Locked - cannot edit' : 'Click to edit color'}"></span>
                                 <span class="turf-name">${name}</span>
                             </div>
                             <div style="display: flex; align-items: center; gap: 4px;">
                                 <span class="turf-count">${visibleParcelCount}${filterNote}</span>
-                                <button class="edit-btn" data-action="edit" data-turf="${name}" title="Edit turf">✏️</button>
-                                <button class="delete-btn" data-action="delete" data-turf="${name}" title="Delete turf">✕</button>
+                                <button class="lock-btn" data-action="toggle-lock" data-turf="${name}" title="${lockTitle}">${lockIcon}</button>
+                                <button class="edit-btn ${turf.locked ? 'disabled' : ''}" data-action="edit" data-turf="${name}" title="${turf.locked ? 'Locked - cannot edit' : 'Edit turf'}">✏️</button>
+                                <button class="delete-btn ${turf.locked ? 'disabled' : ''}" data-action="delete" data-turf="${name}" title="${turf.locked ? 'Locked - cannot delete' : 'Delete turf'}">✕</button>
                             </div>
                         </div>
                         <div class="turf-stats">
@@ -1589,8 +1750,24 @@ class UIManager {
                     this.app.addTurf();
                 }
             });
-            
+
             log('Turf creation events bound');
+        }
+
+        // Bind Lock All / Unlock All button events
+        const lockAllButton = document.getElementById('lockAllTurfs');
+        const unlockAllButton = document.getElementById('unlockAllTurfs');
+
+        if (lockAllButton) {
+            lockAllButton.addEventListener('click', () => {
+                this.app.lockAllTurfs();
+            });
+        }
+
+        if (unlockAllButton) {
+            unlockAllButton.addEventListener('click', () => {
+                this.app.unlockAllTurfs();
+            });
         }
     }
 
@@ -1604,8 +1781,12 @@ class UIManager {
         const self = this;
         this.handleTurfClick = function(e) {
             const target = e.target;
-            
-            if (target.dataset.action === 'edit') {
+
+            if (target.dataset.action === 'toggle-lock') {
+                e.stopPropagation();
+                const name = target.dataset.turf;
+                self.app.toggleTurfLock(name);
+            } else if (target.dataset.action === 'edit') {
                 e.stopPropagation();
                 const name = target.dataset.turf;
                 self.app.startEdit(name);
